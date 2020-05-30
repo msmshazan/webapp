@@ -74,9 +74,11 @@ static void echo_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
         }
         else
         {
+            zpl_file_contents icofile = zpl_file_read_contents(allocator,true,"favicon.ico");
             response = zpl_string_make(allocator ,"HTTP/1.1 200 OK \r\n" \
-                                        "\r\n" \
-                                        "Hello ");
+                                        "content-type: image/x-icon \r\n" \
+                                       "\r\n");
+            response = zpl_string_append_length(response,icofile.data,icofile.size);
         }
         uv_read_stop(client);
         zpl_free(allocator,buf->base);
