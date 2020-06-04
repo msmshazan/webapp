@@ -10,6 +10,7 @@
 #include <uv.h>
 #include <sodium.h>
 #include <pdfium/fpdfview.h>
+#include <pq/libpq-fe.h>
 #include "mustach.h"
 #include "mustach-json-c.h"
 #include "picohttpparser.h"
