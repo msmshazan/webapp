@@ -1,5 +1,5 @@
 @echo off
-set CompilerFlags=  /nologo /Z7 /EHsc /wd4003 /MT /diagnostics:classic  -fdiagnostics-absolute-paths 
+set CompilerFlags=  /nologo /Z7 /EHsc /wd4003 /MT /diagnostics:classic  -fdiagnostics-absolute-paths  /clang:-std=c11
 set LinkerFlags=-subsystem:console
 set bits=x64
 set AssetsLocation=..\assets\

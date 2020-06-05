@@ -27,7 +27,20 @@ typedef struct {
     size_t msg_len;
 }request_data;
 
-static void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+
+static void connectToDatabase(){
+    PGconn* DBConnenction = PQsetdbLogin("host","port","options","tty","dbname","login","pwd");
+}
+
+static void retrieveFromDatabase(PGconn * conn){
+
+    PGresult* Result = PQexec(conn,"Select * FROM test;");
+    ExecStatusType Status = PQresultStatus(Result);
+    char* id = PQgetvalue(Result,0,0);
+    int money = zpl_endian_swap32(*(PQgetvalue(Result,0,1)));
+}
+
+static void allocBuffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
 
     zpl_allocator allocator =  ((connection_t *)handle->data)->server->arena_allocator;
     
@@ -118,12 +131,11 @@ static void echo_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
         #undef HEADER_NUM
         int reqres = phr_parse_request(buf->base, buf->len, &(data.method), &(data.method_len), &(data.path), &(data.path_len),
                                     &minor_version, headers, (size_t *)&num_headers, 0);
-        //int respres = phr_parse_response(buf->base, buf->len, &minor_version,&(data.status),&(data.msg),&(data.msg_len),  headers, (size_t *)&num_headers, 0);
 
         char* bodydata  = buf->base;
         if( num_headers>0){
             for(int i =0 ; i <= (num_headers + 1) ; i++) {
-                bodydata = zpl_strchr(bodydata,'\n');
+                bodydata = (char *)zpl_strchr(bodydata,'\n');
                 bodydata++;
             }
         }
@@ -135,6 +147,7 @@ static void echo_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
         if(!handled) handled =  handle_get_func(wildcard_path_handler,data,"/*",&response);
         if(!handled) handled =  handle_post_func(forbidden_handler,data,"/*",&response);
         zpl_free(allocator,buf->base);
+        int respres = phr_parse_response(response, zpl_string_length(response), &minor_version,&(data.status),&(data.msg),&(data.msg_len),  headers, (size_t *)&num_headers, 0);
         uv_buf_t buffer = {};
         buffer.len = zpl_string_length(response);
         buffer.base = zpl_alloc(allocator,buffer.len + 1);
@@ -169,7 +182,7 @@ static void on_new_connection(uv_stream_t *server, int status) {
         return ;
     }
 
-    r = uv_read_start((uv_stream_t*) client, alloc_buffer, echo_read);
+    r = uv_read_start((uv_stream_t*) client, allocBuffer, echo_read);
     if (r) {
         fprintf(stderr, "[Error]: Read error %s\n", uv_strerror(r));
         zpl_free(connection_pool_allocator,connection);

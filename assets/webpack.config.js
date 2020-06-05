@@ -14,7 +14,7 @@ module.exports = {
     mode:'development',
     plugins: [
         new MiniCssExtractPlugin() , 
-        new HtmlWebpackPlugin({ hash:true,title: 'Test Application',template: './index.html',}),
+        new HtmlWebpackPlugin({hash:true,title: 'Test Application',template: './index.html',}),
         new CleanWebpackPlugin()
       ],
     module: {
@@ -44,5 +44,8 @@ module.exports = {
                 ]
               }
         ]
+      },
+      output: {
+        filename: '[name].bundle.js'
       }
   };
