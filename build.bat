@@ -2,7 +2,7 @@
 set CompilerFlags=  /nologo /Z7 /EHsc /wd4003 /MT /diagnostics:classic  -fdiagnostics-absolute-paths  /clang:-std=c11
 set LinkerFlags=-subsystem:console
 set bits=x64
-set AssetsLocation=..\assets\
+set AssetsLocation=..\assets\dist\
 set LibraryLocation=..\deps\libs\%bits%\
 set LinkLibraries=mbedcrypto.lib mbedtls.lib libpq.lib mbedx509.lib json-c.lib libsodium.lib nghttp2.lib uv.lib pdfium.dll.lib libc++.dll.lib zlib.dll.lib advapi32.lib winmm.lib user32.lib kernel32.lib 
 mkdir build > NUL 2> NUL
