@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "main": "",
   "scripts": {
-    "release": "webpack --config webpack.prod.js",
-    "debug": "webpack --config webpack.dev.js",
+    "build":"webpack --config webpack.dev.js && npm run deploy",
+    "release": "webpack --config webpack.prod.js && npm run deploy",
     "test": "webpack --watch --config webpack.dev.js",
-    "build":"npm run debug && npm run deploy",
     "deploy":"robocopy dist ../build /NFL /NDL /nc /ns /np  &exit 0 "
   },
   "keywords": [],

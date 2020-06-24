@@ -16,6 +16,7 @@ typedef struct {
     zpl_allocator generalAllocator;
     zpl_allocator arenaAllocator;
     DatabaseContext database;
+    zpl_array(zpl_string) sessions;
 }ServerContext;
 
 typedef struct {
@@ -36,6 +37,10 @@ typedef struct {
     int numHeaders;
     int headersCap;
     const char* body;
+    size_t bodyLength;
+    zpl_string sessionid;
+    bool generatesession;
+    bool sessiongenerated;
 }RequestData;
 
 
@@ -156,83 +161,133 @@ static int HandlePostFunc(HttpHandler handler,RequestData data,const char* reque
 }
 
 
-static void TestWildcardHandler(RequestData data,zpl_string *response){
-    *response = zpl_string_appendc(*response,"HTTP/1.1 200 OK \r\n" \
-                               "\r\n");
-    *response = zpl_string_appendc(*response,"<!DOCTYPE html>\r\n" \
-                                  "<html>\r\n"\
-                                  "<body>\r\n"\
-                                  "\r\n"\
-                                  "<h1>Heading</h1>\r\n" \
-                                  "<p>Paragraph.</p>\r\n" \
-                                  "<p>Path: ");
-    *response = zpl_string_append_length(*response,data.path,data.pathLength);
-    *response = zpl_string_appendc(*response,"<p>\r\n" \
-                                  "</body>\r\n"\
-                                  "</html>\r\n");
+static int HandlePutFunc(HttpHandler handler,RequestData data,const char* requestedPath,zpl_string* response){
+    int result = false;
+    if(zpl_strncmp(data.method,"PUT",3)==0){
+        if(zpl_strncmp(data.path,requestedPath,data.pathLength)==0
+           || (zpl_strncmp(requestedPath,"/*",2)==0)) {
+            handler(data,response);
+            result = true;
+        }
+    }
+    return result;
 }
 
-static void ForbiddenHandler(RequestData data,zpl_string *response){
-    zpl_allocator allocator = ZPL_STRING_HEADER(*response)->allocator;
-    *response = zpl_string_appendc(*response,"HTTP/1.1 403 Forbidden \r\n" \
-                               "\r\n");
-    *response = zpl_string_appendc(*response,"Forbidden\r\n");    
+static zpl_string HashPassword(zpl_string password){
+    zpl_allocator allocator = ZPL_STRING_HEADER(password)->allocator;
+    char out[crypto_pwhash_STRBYTES] = {};
+    crypto_pwhash_str(out,password,zpl_string_length(password),crypto_pwhash_OPSLIMIT_INTERACTIVE ,crypto_pwhash_MEMLIMIT_INTERACTIVE);
+    return zpl_string_make(allocator,out);
 }
 
-static void IndexHandler(RequestData data,zpl_string *response){
-    zpl_allocator allocator = ZPL_STRING_HEADER(*response)->allocator;
-    *response = zpl_string_appendc(*response,"HTTP/1.1 200 OK \r\n" \
-                               "\r\n");
-    zpl_file_contents indexfile = zpl_file_read_contents(allocator,true,"index.html");
-    *response = zpl_string_append_length(*response,indexfile.data,indexfile.size);    
-    zpl_file_free_contents(&indexfile);
-}
-
-static void LoginHandler(RequestData data,zpl_string *response){
-    zpl_allocator allocator = ZPL_STRING_HEADER(*response)->allocator;
-    *response = zpl_string_appendc(*response,"HTTP/1.1 200 OK \r\n" \
-                               "\r\n");
-    zpl_file_contents indexfile = zpl_file_read_contents(allocator,true,"login.html");
-    *response = zpl_string_append_length(*response,indexfile.data,indexfile.size);    
-    zpl_file_free_contents(&indexfile);
-}
-
-static void AdminHandler(RequestData data,zpl_string *response){
-    zpl_allocator allocator = ZPL_STRING_HEADER(*response)->allocator;
-    *response = zpl_string_appendc(*response,"HTTP/1.1 200 OK \r\n" \
-                               "\r\n");
-    zpl_file_contents indexfile = zpl_file_read_contents(allocator,true,"admin.html");
-    *response = zpl_string_append_length(*response,indexfile.data,indexfile.size);    
-    zpl_file_free_contents(&indexfile);
+static bool CheckPassword(zpl_string hasedPassword,zpl_string passwordToVerify){
+ int result =  crypto_pwhash_str_verify(hasedPassword,passwordToVerify,zpl_string_length(passwordToVerify));
+ return (result == 0 ) ? true : false;
 }
 
 static void SignupHandler(RequestData data,zpl_string *response){
     zpl_allocator allocator = ZPL_STRING_HEADER(*response)->allocator;
-    char* sessionid = "hfdhdf";
-    *response = zpl_string_appendc(*response,"HTTP/1.1 200 OK \r\n" );
-    *response = zpl_string_appendc(*response,"Set-Cookie: id=\"");
-    *response = zpl_string_appendc(*response,sessionid);
-    *response = zpl_string_appendc(*response,"\"; max-age=18000; path=/; Secure; HttpOnly");
+    zpl_json_object object = {};
+    zpl_u8 errcode;
+    zpl_json_parse(&object,data.bodyLength ,data.body ,allocator,true,&errcode);
+    char* name = zpl_json_find(&object,"name",false)->string;
+    char* password = zpl_json_find(&object,"password",false)->string;
+    char* email = zpl_json_find(&object,"email",false)->string;
+    zpl_string hashedPassword = HashPassword(zpl_string_make(allocator,password));
+    *response = zpl_string_appendc(*response,"HTTP/1.1 200 \r\n" );
+    if(data.generatesession){
+        zpl_u64 *sessiondata = zpl_alloc(allocator,16);
+        randombytes_buf((void *)sessiondata,16);
+        *response = zpl_string_appendc(*response,"Set-Cookie: sid=");
+        data.sessionid = zpl_string_make(allocator,zpl_base64_encode(allocator,sessiondata,16));
+        *response = zpl_string_append(*response,data.sessionid);
+        *response = zpl_string_appendc(*response,"; max-age=18000; path=/; Secure;SameSite=Strict; HttpOnly\r\n");
+        zpl_free(allocator,sessiondata);
+        data.generatesession = false;
+        data.sessiongenerated = true;
+    }
+    *response = zpl_string_appendc(*response,"\r\n");
+    zpl_json_object jsonOutput ={};
+    zpl_json_init_node(&jsonOutput,allocator,"redirect",ZPL_JSON_TYPE_STRING);
+    jsonOutput.string = "true";
+    zpl_json_add(&jsonOutput,"redirecturl",ZPL_JSON_TYPE_STRING)->string = "/login.html";
+    zpl_file temp ={};
+    zpl_file_temp(&temp);
+    zpl_json_write(&temp,&jsonOutput,0);
+    zpl_json_free(&jsonOutput);
+    zpl_file_seek(&temp,0);
+    zpl_file_seek_to_end(&temp);
+    int filesize = zpl_file_tell(&temp);
+    char * jsonStr = zpl_alloc(allocator,filesize);
+    zpl_file_read(&temp,jsonStr,filesize);
+    zpl_file_close(&temp);
+    *response = zpl_string_appendc(*response,jsonStr);    
+    *response = zpl_string_appendc(*response,"\r\n");    
+    zpl_free(allocator,jsonStr);
+}
+
+
+static void LoginHandler(RequestData data,zpl_string *response){
+    zpl_allocator allocator = ZPL_STRING_HEADER(*response)->allocator;
+    zpl_json_object object = {};
+    zpl_u8 errcode;
+    zpl_json_parse(&object,data.bodyLength ,data.body ,allocator,true,&errcode);
+    char* name = zpl_json_find(&object,"name",false)->string;
+    zpl_string password = zpl_string_make(allocator,zpl_json_find(&object,"password",false)->string);
+    zpl_string hashedPassword = HashPassword(password);
+    bool IsVerfied = CheckPassword(hashedPassword,password);
+    *response = zpl_string_appendc(*response,"HTTP/1.1 200 \r\n" );
+    if(!(data.sessionid))
+    {
+        zpl_u64 *sessiondata = zpl_alloc(allocator,16);
+        randombytes_buf((void *)sessiondata,16);
+        *response = zpl_string_appendc(*response,"Set-Cookie: sid=");
+        data.sessionid = zpl_string_make(allocator,zpl_base64_encode(allocator,sessiondata,16));
+        *response = zpl_string_append(*response,data.sessionid);
+        *response = zpl_string_appendc(*response,"; max-age=18000; path=/; Secure; HttpOnly\r\n");
+        zpl_free(allocator,sessiondata);
+        data.generatesession = false;
+        data.sessiongenerated = true;
+    }
     *response = zpl_string_appendc(*response,"\r\n");
     *response = zpl_string_appendc(*response,"\r\n");    
 }
 
-static uv_buf_t GenerateResponse(zpl_allocator allocator,RequestData data){
+static uv_buf_t GenerateResponse(zpl_array(zpl_string) sessions ,zpl_allocator allocator,RequestData data){
 
         zpl_string response = zpl_string_make_reserve(allocator,10);
         bool handled = false;
-        bool clientauthenticated = false;
-        if(clientauthenticated)
-        {
-            
+        //Check SessionId
+        for(int i = 0 ; i < data.numHeaders;i++){
+            struct phr_header header =  data.headers[i];
+            if(zpl_strncmp(header.name,"Cookie",6)==0){
+                char *path = (char *)header.value;
+                int p = 0 ;
+                while(p < header.value_len){
+                    if(zpl_strncmp(path,"sid=",4)){
+                        int sessionidlen = (int)(zpl_strchr(path,';') - path) - 3 ;
+                        sessionidlen = sessionidlen < header.value_len ? sessionidlen : header.value_len - (3 + 1);  
+                        data.sessionid = zpl_string_make_length(allocator,path + 3,sessionidlen); 
+                    }
+                    path++;
+                    p++;
+                }
+            }
         }
-
-        if(!handled) handled = HandlePostFunc(SignupHandler,data,"/login",&response);
-        if(!handled) handled = HandleGetFunc(IndexHandler,data,"/",&response);
-        if(!handled) handled = HandleGetFunc(LoginHandler,data,"/login",&response);
-        if(!handled) handled = HandleGetFunc(AdminHandler,data,"/admin",&response);
-        if(!handled) handled = HandleGetFunc(ForbiddenHandler,data,"/*",&response);
-
+        data.generatesession = true;
+        if(data.sessionid){
+            for(int i =0 ; i < zpl_array_count(sessions);i++){
+                if(zpl_string_are_equal(data.sessionid ,sessions[i])) data.generatesession = false;
+            }
+        }
+        
+        if(!handled) handled = HandlePostFunc(SignupHandler,data,"/signup",&response);
+        if(!handled) handled = HandlePostFunc(LoginHandler,data,"/login",&response);
+            
+        if(data.sessiongenerated){
+            zpl_array_append(sessions,data.sessionid);
+            data.sessiongenerated = false;
+        }
         uv_buf_t buffer = {};
         buffer.len = zpl_string_length(response);
         buffer.base = zpl_alloc(allocator,buffer.len + 1);
@@ -243,6 +298,7 @@ static uv_buf_t GenerateResponse(zpl_allocator allocator,RequestData data){
 
 static void EchoRead(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
     zpl_allocator allocator =  ((Connection *)client->data)->server->arenaAllocator;
+    zpl_array(zpl_string) sessions = ((Connection *)client->data)->server->sessions;
     uv_read_stop(client);
     if (nread > 0) {
         RequestData data = {};
@@ -250,10 +306,20 @@ static void EchoRead(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
         data.headers = zpl_alloc(allocator,sizeof(struct phr_header) *data.headersCap);
         data.numHeaders = data.headersCap;
         int minorVersion = 0;
-        int bodyaddress = phr_parse_request(buf->base, buf->len, &(data.method), &(data.methodLength), &(data.path), &(data.pathLength),
-                                       &minorVersion,(data.headers), (size_t *)&(data.numHeaders), 0);
-        data.body  = buf->base + bodyaddress;
-        uv_buf_t buffer =  GenerateResponse(allocator,data);
+        int bodyoffset = phr_parse_request(buf->base, buf->len, &(data.method), &(data.methodLength), &(data.path), &(data.pathLength),
+                                           &minorVersion,(data.headers), (size_t *)&(data.numHeaders), 0);
+        for(int i = 0 ; i < data.numHeaders;i++){
+            struct phr_header header =  data.headers[i];
+            if(zpl_strncmp(header.name,"Content-Length",14)==0){
+                char *path = zpl_strdup(allocator,header.value,header.value_len);
+                data.bodyLength = zpl_str_to_u64(path,path + header.value_len ,10);
+                zpl_free(allocator,path);
+            }
+            if(data.bodyLength) break;
+            
+        }
+        data.body  = buf->base + bodyoffset;
+        uv_buf_t buffer =  GenerateResponse(sessions,allocator,data);
         int respres = phr_parse_response(buffer.base, strlen(buffer.base), &minorVersion,&(data.status),&(data.message),&(data.messageLength),  data.headers, (size_t *)&(data.numHeaders), 0);
         zpl_free(allocator,data.headers);
         zpl_free(allocator,buf->base);
@@ -292,13 +358,14 @@ static void OnNewConnection(uv_stream_t *server, int status) {
 }
 
 int main(int argc ,char** argv) {
-    TestDatabase();
+    sodium_init();
     zpl_allocator generalAllocator =  zpl_heap_allocator();
     ServerContext* serverContext = zpl_alloc(generalAllocator,sizeof(ServerContext));
     zpl_arena arena = {};
     zpl_arena_init_from_allocator(&arena,generalAllocator,zpl_megabytes(20));
     zpl_allocator arenaAllocator = zpl_arena_allocator(&arena);
     zpl_pool_init(&(serverContext->connectionPool),generalAllocator,128,sizeof(Connection));
+    zpl_array_init(serverContext->sessions,generalAllocator);
     zpl_allocator poolAllocator = zpl_pool_allocator(&(serverContext->connectionPool));
     serverContext->connectionPoolAllocator = poolAllocator;
     serverContext->generalAllocator = generalAllocator;
@@ -314,6 +381,7 @@ int main(int argc ,char** argv) {
         fprintf(stderr, "Listen error %s\n", uv_strerror(r));
         return 1;
     }
+    randombytes_close();
     uv_run(loop, UV_RUN_DEFAULT);
     return 0;
 }

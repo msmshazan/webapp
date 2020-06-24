@@ -10,7 +10,8 @@ function main() {
   m.render(root, m("div.formcontainer",
   [
         m("label","Login to Site"),
-        m("form.loginform[action='api/login'][method='post']",
+        m("br"),
+        m("div.loginform",
         [
             m("label[for='name']","Name"),
             m("br"),
@@ -20,7 +21,26 @@ function main() {
             m("br"),
             m("input#pwd.forminput[type=password][name='pwd']"),
             m("br"),
-            m("input.button[type=submit][value='Login']"),
+            m("button.button",{
+              onclick() {
+                m.request({
+                  method: "POST",
+                  url: "/api/login",
+                  body: {
+                    name: document.getElementById('name').value ,
+                    password: document.getElementById('pwd').value ,
+                  }
+              })
+              .then(function(result) {
+                if(result== null){
+                  console.log('failed');
+                }else{
+                  window.location.href = result.redirecturl;
+                  console.log(result);
+                }
+              })
+              }
+            },"Login"),
         ]),
   ]
   ));
