@@ -39,7 +39,9 @@ function main() {
                 if(result== null){
                   console.log('failed');
                 }else{
-                  window.location.href = result.redirecturl;
+                  if(result.redirect == 'true'){
+                  window.location.href = result.redirectlink;
+                  }
                   console.log(result);
                 }
               })

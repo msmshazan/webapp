@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "main": "",
   "scripts": {
-    "build":"webpack --config webpack.dev.js && npm run deploy",
+    "build": "webpack --config webpack.dev.js && npm run deploy",
     "release": "webpack --config webpack.prod.js && npm run deploy",
     "test": "webpack --watch --config webpack.dev.js",
-    "deploy":"robocopy dist ../build /NFL /NDL /nc /ns /np  &exit 0 "
+    "deploy": "robocopy dist ../build /NFL /NDL /nc /ns /np  &exit 0 "
   },
   "keywords": [],
   "author": "",
@@ -32,6 +32,8 @@
     "lodash": "^4.17.15",
     "mini-css-extract-plugin": "^0.9.0",
     "mithril": "^2.0.4",
+    "monaco-editor": "^0.20.0",
+    "monaco-editor-webpack-plugin": "^1.9.0",
     "optimize-css-assets-webpack-plugin": "^5.0.3",
     "postcss": "^7.0.32",
     "source-map-loader": "^1.0.0",

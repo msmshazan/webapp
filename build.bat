@@ -1,5 +1,5 @@
 @echo off
-set CompilerFlags=  /nologo /Z7 /EHsc /wd4003 /MT /diagnostics:classic  -fdiagnostics-absolute-paths  /clang:-std=c11
+set CompilerFlags= /nologo /Z7 /EHsc /wd4003 /MT /diagnostics:classic -Wno-unused-result  -fdiagnostics-absolute-paths  /clang:-std=c11
 set LinkerFlags=-subsystem:console
 set bits=x64
 set AssetsLocation=..\assets\dist\
@@ -16,9 +16,9 @@ IF NOT DEFINED vcvars_called (
 cd build
 del *.pdb > NUL 2> NUL
 ctime -begin webapp.ctm
-clang-cl %CompilerFlags% /c /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_WARNINGS ..\code\picohttpparser.c ..\code\mustach.c ..\code\mustach-json-c.c /I..\deps\include
-clang-cl %CompilerFlags% ..\code\server.c   /I..\deps\include /link mustach.obj mustach-json-c.obj picohttpparser.obj -incremental:no /LIBPATH:%LibraryLocation%  %LinkLibraries% %LinkerFlags% -out:server.exe
-clang-cl %CompilerFlags% ..\code\client.c   /I..\deps\include /link mustach.obj mustach-json-c.obj picohttpparser.obj -incremental:no /LIBPATH:%LibraryLocation%  %LinkLibraries% %LinkerFlags% -out:client.exe
+clang-cl %CompilerFlags% /c  /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_WARNINGS ..\code\picohttpparser.c ..\code\log.c ..\code\mustach.c ..\code\mustach-json-c.c /I..\deps\include
+clang-cl %CompilerFlags% ..\code\server.c   /I..\deps\include /link mustach.obj log.obj mustach-json-c.obj picohttpparser.obj -incremental:no /LIBPATH:%LibraryLocation%  %LinkLibraries% %LinkerFlags% -out:server.exe
+REM clang-cl %CompilerFlags% ..\code\client.c   /I..\deps\include /link mustach.obj mustach-json-c.obj picohttpparser.obj -incremental:no /LIBPATH:%LibraryLocation%  %LinkLibraries% %LinkerFlags% -out:client.exe
 ctime -end webapp.ctm
 REM "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\gflags.exe" /p /enable server.exe /full
 REM "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\gflags.exe" /p /disable server.exe

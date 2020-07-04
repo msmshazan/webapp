@@ -14,6 +14,7 @@
 #include "mustach.h"
 #include "mustach-json-c.h"
 #include "picohttpparser.h"
+#include "log.h"
 #define ZPL_IMPL
 #include "zpl.h"
 
